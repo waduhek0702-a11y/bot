@@ -130,5 +130,10 @@ def batch_max() -> int:
 
 
 def morning_hour() -> int:
-    """Giờ bắt đầu tìm kiếm AI mỗi sáng (mặc định 1 giờ trước giờ gửi bản tin, tức 06:00)."""
-    return env_int("MORNING_HOUR", digest_hour() - 1)
+    """Giờ bắt đầu tìm kiếm AI mỗi ngày (mặc định 0 giờ sáng)."""
+    return env_int("MORNING_HOUR", 0)
+
+
+def morning_gap_sec() -> int:
+    """Khoảng cách tối thiểu giữa 2 lệnh tìm kiếm AI buổi sáng (mỗi lệnh = 1 tỉnh)."""
+    return env_int("MORNING_GAP_SEC", 240)

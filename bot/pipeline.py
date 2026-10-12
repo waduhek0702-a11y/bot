@@ -189,28 +189,58 @@ def run_discover(db: DB, llm: LLM | None, today: date, deadline: float) -> int:
     return new
 
 
-def run_morning(db: DB, llm: LLM | None, today: date, force: bool = False) -> int:
-    """Tìm kiếm AI MỘT lần/ngày cho N ngày tới của cả 8 tỉnh, qua bộ lọc ingest_ai rồi lưu vào DB.
-    Tối đa 2 lần thử/ngày (kể cả khi lỗi) để không đốt hạn mức. Người dùng /tuannay chỉ đọc từ DB."""
-    if not llm or not llm.can_search():
-        return 0
-    d, _, n = (db.get("morning_tries", "") or "").partition("|")
-    tries = int(n or 0) if d == today.isoformat() else 0
-    if not force and (db.get("morning_done") == today.isoformat() or tries >= 2):
-        return 0
-    db.set("morning_tries", f"{today.isoformat()}|{tries + 1}")
-    res = llm.week_events(today, config.lookahead_days())
+def _morning_one(db: DB, llm: LLM, k: str, today: date) -> tuple[bool, int, dict]:
+    """Tìm sự kiện N ngày tới cho MỘT tỉnh. Trả (thành công, số mới, thống kê)."""
+    res = llm.discover(k, today, config.lookahead_days())
     if res is None:
-        return 0  # lỗi gọi (hết hạn mức...) - thử lại lượt sau
+        return False, 0, {}
     st, new = {}, 0
-    for e in res:
-        s = ingest_ai(db, e, e["province"], today)
+    for d in res:
+        s = ingest_ai(db, d, k, today)
         st[s] = st.get(s, 0) + 1
         new += s == "new"
-    if res:
-        db.set("morning_done", today.isoformat())
-    db.set("last_morning", f"{config.now().isoformat(timespec='seconds')}: {len(res)} sự kiện -> {st}")
-    log.info("AI tìm sáng: %d sự kiện -> %s", len(res), st)
+    db.set(f"morn_{k}", today.isoformat())
+    return True, new, st
+
+
+def run_morning(db: DB, llm: LLM | None, today: date, force: bool = False) -> int:
+    """Tìm kiếm AI mỗi ngày, MỖI LẦN MỘT TỈNH, cách nhau >= MORNING_GAP_SEC để không dính 429.
+    Mỗi tỉnh tối đa 3 lần thử/ngày. force=True: chạy lần lượt cả 8 tỉnh ngay (lệnh `morning`)."""
+    if not llm or not llm.can_search():
+        return 0
+    iso, now = today.isoformat(), config.now()
+    if force:
+        total = 0
+        for k in PROVINCES:
+            if not llm.can_search():
+                break
+            ok, new, st = _morning_one(db, llm, k, today)
+            if not ok:
+                break
+            total += new
+            log.info("AI tìm sáng %s: %s", k, st)
+        db.set("last_morning", f"{now.isoformat(timespec='seconds')}: chạy tay, thêm {total} sự kiện")
+        return total
+
+    def tries(k: str) -> int:
+        d, _, n = (db.get(f"morn_try_{k}", "") or "").partition("|")
+        return int(n or 0) if d == iso else 0
+
+    todo = [k for k in PROVINCES if db.get(f"morn_{k}") != iso and tries(k) < 3]
+    if not todo:
+        return 0
+    last = db.get("morning_last")
+    if last and (now - datetime.fromisoformat(last)).total_seconds() < config.morning_gap_sec():
+        return 0
+    k = todo[0]
+    db.set("morning_last", now.isoformat(timespec="seconds"))  # ghi trước khi gọi: lỗi cũng phải giãn cách
+    db.set(f"morn_try_{k}", f"{iso}|{tries(k) + 1}")
+    ok, new, st = _morning_one(db, llm, k, today)
+    if ok:
+        db.set("last_morning", f"{now.isoformat(timespec='seconds')}: {k} -> {st}; còn {len(todo) - 1} tỉnh")
+        log.info("AI tìm sáng %s: %s", k, st)
+    else:
+        db.set("last_morning", f"{now.isoformat(timespec='seconds')}: {k} LỖI (lần {tries(k) + 1}), thử lại lượt sau")
     return new
 
 
