@@ -36,7 +36,7 @@ def main(argv=None) -> int:
     u.add_argument("url")
     sub.add_parser("enrich", help="tìm lại bài báo để bổ sung ngày/địa điểm cho các sự kiện còn thiếu")
     sub.add_parser("discover", help="hỏi Gemini+Google Search tìm sự kiện từng tỉnh (tốn nhiều hạn mức)")
-    sub.add_parser("morning", help="AI tìm sự kiện 7 ngày tới cho cả 8 tỉnh bằng 1 lệnh, lưu vào DB (ép chạy)")
+    sub.add_parser("morning", help="AI tìm sự kiện 7 ngày tới, lần lượt từng tỉnh (ép chạy cả 8 tỉnh)")
     sub.add_parser("set-commands", help="đặt menu gợi ý lệnh (gõ / trong Telegram)")
     sub.add_parser("prune-noise", help="xoá khỏi DB các tin không phải lễ hội/văn hoá/sự kiện")
     sub.add_parser("dedupe", help="gộp các sự kiện trùng đã lưu trong DB")
